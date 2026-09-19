@@ -1,0 +1,212 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+
+local player = Players.LocalPlayer
+local folder = workspace:WaitForChild("_LocalGoldNuggetDrops")
+
+local running = false
+
+--==================================================
+-- NOTIFICATION
+--==================================================
+
+local function notify(text)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = "Gold Nugget",
+			Text = text,
+			Duration = 3
+		})
+	end)
+
+	print("[Gold Nugget] " .. text)
+end
+
+--==================================================
+-- FIND DROPS
+--==================================================
+
+local function getDrops()
+	local drops = {}
+
+	for _, drop in ipairs(folder:GetChildren()) do
+		if drop:FindFirstChild("PickupAnchor", true) then
+			table.insert(drops, drop)
+		end
+	end
+
+	return drops
+end
+
+--==================================================
+-- COLLECT ONE
+--==================================================
+
+local function collectDrop(drop, index, total)
+
+	local anchor = drop:FindFirstChild("PickupAnchor", true)
+
+	if not anchor then
+		return false
+	end
+
+	local character =
+		player.Character
+		or player.CharacterAdded:Wait()
+
+	-- Teleport
+	character:PivotTo(
+		anchor.CFrame + Vector3.new(0, 3, 0)
+	)
+
+	task.wait(0.25)
+
+	-- Find the E interaction
+	local prompt =
+		anchor:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+	if not prompt then
+		prompt = drop:FindFirstChildWhichIsA(
+			"ProximityPrompt",
+			true
+		)
+	end
+
+	if not prompt then
+		warn(
+			"[Gold Nugget] No ProximityPrompt found for target "
+			.. index
+		)
+
+		return false
+	end
+
+	print(
+		"[Gold Nugget] Found prompt:",
+		prompt.Name,
+		prompt.KeyboardKeyCode
+	)
+
+	notify(
+		"At nugget "
+		.. index
+		.. "/"
+		.. total
+		.. " — press E to collect"
+	)
+
+	-- Wait for the game's normal pickup system
+	-- to remove/disable the nugget.
+	local start = os.clock()
+
+	while running and drop.Parent do
+
+		task.wait(0.1)
+
+		if os.clock() - start >= 10 then
+			notify(
+				"Still waiting for nugget "
+				.. index
+				.. "/"
+				.. total
+			)
+
+			start = os.clock()
+		end
+	end
+
+	return not drop.Parent
+end
+
+--==================================================
+-- COLLECTION LOOP
+--==================================================
+
+local function collectAll()
+
+	if running then
+		return
+	end
+
+	running = true
+
+	local drops = getDrops()
+
+	notify(
+		"Found "
+		.. #drops
+		.. " gold nuggets"
+	)
+
+	for i, drop in ipairs(drops) do
+
+		if not running then
+			break
+		end
+
+		local success = collectDrop(
+			drop,
+			i,
+			#drops
+		)
+
+		if success then
+			notify(
+				"Collected "
+				.. i
+				.. "/"
+				.. #drops
+			)
+		else
+			notify(
+				"Could not confirm "
+				.. i
+				.. "/"
+				.. #drops
+			)
+		end
+
+	end
+
+	running = false
+
+	notify("Collection run finished")
+end
+
+--==================================================
+-- P TO START
+--==================================================
+
+UserInputService.InputBegan:Connect(function(input, processed)
+
+	if processed then
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.P then
+		task.spawn(collectAll)
+	end
+
+end)
+
+--==================================================
+-- RESPAWN DETECTION
+--==================================================
+
+folder.ChildAdded:Connect(function(drop)
+
+	task.wait(0.1)
+
+	if drop:FindFirstChild("PickupAnchor", true) then
+		notify("A gold nugget respawned!")
+	end
+
+end)
+
+--==================================================
+-- READY
+--==================================================
+
+print("[Gold Nugget] Collector loaded")
+notify("Collector ready — press P")
