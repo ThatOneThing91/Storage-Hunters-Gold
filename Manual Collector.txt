@@ -6,6 +6,7 @@ local player = Players.LocalPlayer
 local folder = workspace:WaitForChild("_LocalGoldNuggetDrops")
 
 local running = false
+local startCFrame = nil
 
 --==================================================
 -- NOTIFICATION
@@ -40,7 +41,7 @@ local function getDrops()
 end
 
 --==================================================
--- COLLECT ONE — RETRY UNTIL SUCCESSFUL
+-- COLLECT ONE
 --==================================================
 
 local function collectDrop(drop, index, total)
@@ -49,11 +50,7 @@ local function collectDrop(drop, index, total)
 		player.Character
 		or player.CharacterAdded:Wait()
 
-	local attempts = 0
-
 	while running and drop.Parent do
-
-		attempts += 1
 
 		local anchor = drop:FindFirstChild("PickupAnchor", true)
 
@@ -62,14 +59,14 @@ local function collectDrop(drop, index, total)
 			continue
 		end
 
-		-- Teleport to the nugget
+		-- Go to nugget
 		character:PivotTo(
 			anchor.CFrame + Vector3.new(0, 3, 0)
 		)
 
 		task.wait(0.25)
 
-		-- Find the ProximityPrompt
+		-- Find prompt
 		local prompt =
 			anchor:FindFirstChildWhichIsA("ProximityPrompt", true)
 
@@ -81,54 +78,38 @@ local function collectDrop(drop, index, total)
 		end
 
 		if prompt then
-
-			if attempts == 1 or attempts % 5 == 0 then
-				notify(
-					"Trying nugget "
-					.. index
-					.. "/"
-					.. total
-					.. " — attempt "
-					.. attempts
-				)
-			end
-
-			print(
-				"[Gold Nugget] Attempting:",
-				index,
-				"Attempt:",
-				attempts,
-				"Prompt:",
-				prompt.Name
-			)
-
-			-- Activate the game's normal ProximityPrompt
 			pcall(function()
 				fireproximityprompt(prompt)
 			end)
-
-		else
-
-			if attempts == 1 or attempts % 5 == 0 then
-				warn(
-					"[Gold Nugget] No ProximityPrompt found for nugget "
-					.. index
-					.. " — retrying..."
-				)
-			end
-
 		end
 
-		-- Give the game time to process the pickup
 		task.wait(0.5)
-
 	end
 
 	return not drop.Parent
 end
 
 --==================================================
--- COLLECTION LOOP
+-- RETURN TO START
+--==================================================
+
+local function returnToStart()
+
+	if not startCFrame then
+		return
+	end
+
+	local character = player.Character
+
+	if character then
+		character:PivotTo(startCFrame)
+	end
+
+	notify("Returned to starting position")
+end
+
+--==================================================
+-- COLLECTION
 --==================================================
 
 local function collectAll()
@@ -138,6 +119,13 @@ local function collectAll()
 	end
 
 	running = true
+
+	local character =
+		player.Character
+		or player.CharacterAdded:Wait()
+
+	-- Save exact starting position
+	startCFrame = character:GetPivot()
 
 	local drops = getDrops()
 
@@ -153,13 +141,6 @@ local function collectAll()
 			break
 		end
 
-		notify(
-			"Going to nugget "
-			.. i
-			.. "/"
-			.. #drops
-		)
-
 		local success = collectDrop(
 			drop,
 			i,
@@ -174,12 +155,14 @@ local function collectAll()
 				.. #drops
 			)
 		end
-
 	end
 
 	running = false
 
 	notify("Collection run finished")
+
+	-- Return to exact starting position
+	returnToStart()
 end
 
 --==================================================
