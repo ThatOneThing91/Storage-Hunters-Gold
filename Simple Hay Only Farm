@@ -1,0 +1,141 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+
+local player = Players.LocalPlayer
+
+--==================================================
+-- TARGETS
+--==================================================
+
+local trees = workspace["BBOW Builder Assets"]["Other Buildings and  Decoration"].Trees
+
+local targets = {
+	trees:GetChildren()[411],
+	trees:GetChildren()[354],
+	trees.Hay,
+	trees:GetChildren()[150],
+	trees:GetChildren()[373],
+	trees:GetChildren()[438],
+	trees:GetChildren()[384],
+	trees:GetChildren()[430],
+	trees:GetChildren()[347],
+	trees:GetChildren()[413],
+	trees:GetChildren()[394],
+}
+
+--==================================================
+-- SETTINGS
+--==================================================
+
+local running = false
+local teleportDelay = 0.15
+
+--==================================================
+-- NOTIFICATION
+--==================================================
+
+local function notify(title, text)
+	pcall(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = title,
+			Text = text,
+			Duration = 2
+		})
+	end)
+end
+
+--==================================================
+-- GET TARGET POSITION
+--==================================================
+
+local function getPosition(object)
+	if not object then
+		return nil
+	end
+
+	if object:IsA("BasePart") then
+		return object.Position
+	end
+
+	if object:IsA("Model") then
+		return object:GetPivot().Position
+	end
+
+	local part = object:FindFirstChildWhichIsA("BasePart", true)
+
+	if part then
+		return part.Position
+	end
+
+	return nil
+end
+
+--==================================================
+-- TELEPORT
+--==================================================
+
+local function teleportTo(object)
+	local character = player.Character
+	if not character then
+		return
+	end
+
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return
+	end
+
+	local position = getPosition(object)
+
+	if position then
+		root.CFrame = CFrame.new(position + Vector3.new(0, 3, 0))
+	end
+end
+
+--==================================================
+-- LOOP
+--==================================================
+
+task.spawn(function()
+	while true do
+		if running then
+			for _, target in ipairs(targets) do
+				if not running then
+					break
+				end
+
+				teleportTo(target)
+				task.wait(teleportDelay)
+			end
+		else
+			task.wait(0.1)
+		end
+	end
+end)
+
+--==================================================
+-- TOGGLE
+--==================================================
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.Comma then
+		running = not running
+
+		if running then
+			notify("Teleport Loop", "Started")
+		else
+			notify("Teleport Loop", "Stopped")
+		end
+	end
+end)
+
+--==================================================
+-- STARTUP
+--==================================================
+
+notify("Teleport Loop", "Loaded — press , to start")
