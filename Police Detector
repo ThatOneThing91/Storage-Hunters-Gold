@@ -1,0 +1,145 @@
+local Players = game:GetService("Players")
+local UIS = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+
+local player = Players.LocalPlayer
+
+local garages = workspace:WaitForChild("_Debris"):WaitForChild("Garages")
+
+local auctions = {}
+
+local function notify(text)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Police Auction",
+            Text = text,
+            Duration = 5
+        })
+    end)
+end
+
+-- STARTUP TEST
+notify('Loaded! Press "," to teleport.')
+
+print("[Police Auction] SCRIPT LOADED")
+print("[Police Auction] Garages:", garages:GetFullName())
+
+--==================================================
+-- FIND AUCTIONS
+--==================================================
+
+local function checkGarage(garage)
+    if auctions[garage] then
+        return
+    end
+
+    local warning = garage:FindFirstChild("PoliceWarning", true)
+
+    if warning then
+        auctions[garage] = true
+
+        print("[Police Auction] FOUND:", garage.Name)
+
+        notify("Auction Found: " .. garage.Name)
+    end
+end
+
+-- Scan current garages
+for _, garage in ipairs(garages:GetChildren()) do
+    checkGarage(garage)
+end
+
+-- Detect new garages
+garages.ChildAdded:Connect(function(garage)
+    task.wait(0.5)
+    checkGarage(garage)
+end)
+
+-- Detect PoliceWarning appearing later
+garages.DescendantAdded:Connect(function(obj)
+    if obj.Name == "PoliceWarning" then
+        task.wait(0.2)
+
+        for _, garage in ipairs(garages:GetChildren()) do
+            checkGarage(garage)
+        end
+    end
+end)
+
+--==================================================
+-- COMMA KEY
+--==================================================
+
+UIS.InputBegan:Connect(function(input, processed)
+
+    if processed then
+        return
+    end
+
+    if input.KeyCode ~= Enum.KeyCode.Comma then
+        return
+    end
+
+    print("[Police Auction] COMMA PRESSED")
+
+    local target
+
+    for garage in pairs(auctions) do
+        if garage and garage.Parent == garages then
+            target = garage
+            break
+        end
+    end
+
+    if not target then
+        notify("No police auction detected")
+        return
+    end
+
+    print("[Police Auction] Target:", target.Name)
+
+    local entry = target:FindFirstChild("EntrySquare")
+
+    if not entry then
+        notify("No EntrySquare in " .. target.Name)
+        return
+    end
+
+    local promptPart = entry:FindFirstChild("PromptPart")
+
+    if not promptPart then
+        notify("No PromptPart in " .. target.Name)
+        return
+    end
+
+    local character = player.Character
+
+    if not character then
+        return
+    end
+
+    local root = character:FindFirstChild("HumanoidRootPart")
+
+    if not root then
+        return
+    end
+
+    local destination
+
+    if promptPart:IsA("BasePart") then
+        destination = promptPart
+    else
+        destination = promptPart:FindFirstChildWhichIsA("BasePart", true)
+    end
+
+    if not destination then
+        notify("PromptPart has no BasePart")
+        return
+    end
+
+    root.CFrame = destination.CFrame + Vector3.new(0, 3, 0)
+
+    notify("Teleported to " .. target.Name)
+
+    print("[Police Auction] TELEPORTED")
+end)
