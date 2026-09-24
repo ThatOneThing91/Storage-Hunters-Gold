@@ -1,0 +1,151 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local running = false
+local bidding = false
+
+--==================================================
+-- CUSTOM NOTIFICATION
+--==================================================
+
+local function notify(message)
+    pcall(function()
+        local old = playerGui:FindFirstChild("AutoBidNotification")
+
+        if old then
+            old:Destroy()
+        end
+
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "AutoBidNotification"
+        gui.ResetOnSpawn = false
+        gui.Parent = playerGui
+
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(0, 260, 0, 55)
+        frame.Position = UDim2.new(1, -280, 0, 80)
+        frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+        frame.BackgroundTransparency = 0.08
+        frame.BorderSizePixel = 0
+        frame.Parent = gui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = frame
+
+        local text = Instance.new("TextLabel")
+        text.Size = UDim2.new(1, -20, 1, -10)
+        text.Position = UDim2.new(0, 10, 0, 5)
+        text.BackgroundTransparency = 1
+        text.Text = message
+        text.TextColor3 = Color3.fromRGB(255, 255, 255)
+        text.TextSize = 18
+        text.Font = Enum.Font.GothamBold
+        text.TextXAlignment = Enum.TextXAlignment.Center
+        text.TextYAlignment = Enum.TextYAlignment.Center
+        text.Parent = frame
+
+        task.delay(3, function()
+            if gui and gui.Parent then
+                gui:Destroy()
+            end
+        end)
+    end)
+end
+
+--==================================================
+-- BID BUTTON
+--==================================================
+
+local function getBidButton()
+    local ui = playerGui:FindFirstChild("UIControllerGui")
+    if not ui then
+        return nil
+    end
+
+    local auction = ui:FindFirstChild("AuctionBiddingContainer")
+    if not auction then
+        return nil
+    end
+
+    return auction:FindFirstChild("BidButton")
+end
+
+--==================================================
+-- BID EVENT
+--==================================================
+
+local bidEvent = game:GetService("ReplicatedStorage")
+    :WaitForChild("Events")
+    :WaitForChild("Auction")
+    :WaitForChild("Bid")
+
+--==================================================
+-- AUTO BID LOOP
+--==================================================
+
+local function autoBid()
+    if bidding then
+        return
+    end
+
+    bidding = true
+
+    while running do
+        local button = getBidButton()
+
+        if button and button:IsA("GuiButton") then
+
+            if button.Visible and button.Active then
+                pcall(function()
+                    bidEvent:FireServer()
+                end)
+
+                task.wait(0.3)
+            else
+                task.wait(0.1)
+            end
+
+        else
+            -- No auction currently active.
+            -- Keep running so the next auction is picked up.
+            task.wait(0.2)
+        end
+    end
+
+    bidding = false
+end
+
+--==================================================
+-- P TOGGLE
+--==================================================
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+
+    if gameProcessed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.P then
+
+        running = not running
+
+        if running then
+            notify("Auto Bid: ON")
+            task.spawn(autoBid)
+        else
+            notify("Auto Bid: OFF")
+        end
+    end
+end)
+
+--==================================================
+-- LAUNCH
+--==================================================
+
+task.wait(0.5)
+
+notify("Auto Bid Loaded — Press P")
