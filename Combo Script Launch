@@ -1,0 +1,2 @@
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ThatOneThing91/Storage-Hunters-Gold/refs/heads/main/instant%20prompt"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ThatOneThing91/Storage-Hunters-Gold/refs/heads/main/Auto%20Bid"))()
