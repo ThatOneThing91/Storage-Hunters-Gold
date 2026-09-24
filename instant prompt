@@ -1,28 +1,20 @@
 local Workspace = game:GetService("Workspace")
 
-local discovered = {}
-local count = 0
-
-local function processObject(obj)
+local function makeInstant(obj)
     if obj.Name == "EnterAuction" and obj:IsA("ProximityPrompt") then
-        if not discovered[obj] then
-            discovered[obj] = true
-            obj.HoldDuration = 0
-            count += 1
-
-            print("Updated new auction prompt:", obj:GetFullName())
-        end
+        obj.HoldDuration = 0
+        print("Set instant:", obj:GetFullName())
     end
 end
 
--- Find all existing auction prompts
+-- Update all currently loaded auction prompts
 for _, obj in ipairs(Workspace:GetDescendants()) do
-    processObject(obj)
+    makeInstant(obj)
 end
 
-print("Initial scan complete. Found", count, "auction prompts.")
+print("Initial auction scan complete.")
 
--- Only check objects as they're newly loaded into Workspace
+-- Update auction prompts whenever they are loaded/reloaded
 Workspace.DescendantAdded:Connect(function(obj)
-    processObject(obj)
+    makeInstant(obj)
 end)
