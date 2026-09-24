@@ -1,4 +1,4 @@
-https://raw.githubusercontent.com/ThatOneThing91/Storage-Hunters-Gold/refs/heads/main/instant%20prompt
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ThatOneThing91/Storage-Hunters-Gold/refs/heads/main/instant%20prompt"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ThatOneThing91/Storage-Hunters-Gold/refs/heads/main/Auto%20Bid"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ThatOneThing91/Storage-Hunters-Gold/refs/heads/main/Apple%20Tree%20Knocker"))()
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ThatOneThing91/Storage-Hunters-Gold/refs/heads/main/Simple%20Hay%20Only%20Farm"))()
