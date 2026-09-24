@@ -143,7 +143,7 @@ task.spawn(function()
 end)
 
 --==================================================
--- TOGGLE WITH COMMA
+-- TOGGLE WITH <
 --==================================================
 
 UserInputService.InputBegan:Connect(function(input, processed)
@@ -151,7 +151,9 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		return
 	end
 
-	if input.KeyCode == Enum.KeyCode.Comma then
+	if input.KeyCode == Enum.KeyCode.Comma
+		and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+
 		running = not running
 
 		if running then
@@ -168,5 +170,5 @@ end)
 
 notify(
 	"Teleport Loop",
-	"Loaded — " .. #folders .. " folders / " .. #targets .. " targets — press , to start"
+	"Loaded — " .. #folders .. " folders / " .. #targets .. " targets — press < to start"
 )
