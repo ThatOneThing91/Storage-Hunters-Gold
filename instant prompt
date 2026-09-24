@@ -1,0 +1,12 @@
+local garages = workspace:WaitForChild("_Debris"):WaitForChild("Garages")
+
+local count = 0
+
+for _, obj in ipairs(garages:GetDescendants()) do
+    if obj.Name == "EnterAuction" and obj:IsA("ProximityPrompt") then
+        obj.HoldDuration = 0
+        count += 1
+    end
+end
+
+print("Changed", count, "auction prompts to instant activation.")
