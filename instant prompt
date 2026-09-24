@@ -1,12 +1,28 @@
-local garages = workspace:WaitForChild("_Debris"):WaitForChild("Garages")
+local Workspace = game:GetService("Workspace")
 
+local discovered = {}
 local count = 0
 
-for _, obj in ipairs(garages:GetDescendants()) do
+local function processObject(obj)
     if obj.Name == "EnterAuction" and obj:IsA("ProximityPrompt") then
-        obj.HoldDuration = 0
-        count += 1
+        if not discovered[obj] then
+            discovered[obj] = true
+            obj.HoldDuration = 0
+            count += 1
+
+            print("Updated new auction prompt:", obj:GetFullName())
+        end
     end
 end
 
-print("Changed", count, "auction prompts to instant activation.")
+-- Find all existing auction prompts
+for _, obj in ipairs(Workspace:GetDescendants()) do
+    processObject(obj)
+end
+
+print("Initial scan complete. Found", count, "auction prompts.")
+
+-- Only check objects as they're newly loaded into Workspace
+Workspace.DescendantAdded:Connect(function(obj)
+    processObject(obj)
+end)
