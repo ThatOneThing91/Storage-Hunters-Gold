@@ -1,0 +1,117 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local hrp = character:WaitForChild("HumanoidRootPart")
+
+local ball = workspace.ThatOneThing91:WaitForChild("Basketball")
+
+local hoop = workspace["BBOW Builder Assets"]
+    ["Other Buildings and  Decoration"]
+    ["Basket Ball "]
+    .Hoop
+    .Ring
+
+local running = false
+
+--==================================================
+-- NOTIFICATION
+--==================================================
+
+local function notify(title, text)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 2
+        })
+    end)
+end
+
+--==================================================
+-- LOCK ONTO RIM
+--==================================================
+
+local function lockToRim()
+    local direction = hoop.Position - hrp.Position
+    direction = Vector3.new(direction.X, 0, direction.Z)
+
+    if direction.Magnitude > 0 then
+        hrp.CFrame = CFrame.lookAt(
+            hrp.Position,
+            hrp.Position + direction
+        )
+    end
+end
+
+--==================================================
+-- SHOOTING LOOP
+--==================================================
+
+local function startShooting()
+    if running then
+        return
+    end
+
+    running = true
+
+    -- Perfect shooting position
+    hrp.CFrame = CFrame.new(-274, 1723, -590)
+
+    task.wait(0.5)
+
+    notify("Auto Basketball", "ON")
+
+    task.spawn(function()
+        local shot = 0
+
+        while running do
+            shot += 1
+
+            -- Lock onto rim
+            lockToRim()
+
+            task.wait(0.1)
+
+            -- Start charging
+            ball:Activate()
+
+            print("Charging shot", shot)
+
+            -- Charge the shot
+            task.wait(1)
+
+            -- Release the ball
+            ball:Deactivate()
+
+            print("Released shot", shot)
+
+            -- Wait before next shot
+            task.wait(0.5)
+        end
+
+        notify("Auto Basketball", "OFF")
+        print("Auto basketball stopped.")
+    end)
+end
+
+--==================================================
+-- , KEY TOGGLE
+--==================================================
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.Comma then
+        if running then
+            running = false
+        else
+            startShooting()
+        end
+    end
+end)
+
+notify("Auto Basketball", "Loaded - Press , to start")
