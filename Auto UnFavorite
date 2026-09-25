@@ -1,0 +1,152 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+
+local inventoryEvents = ReplicatedStorage
+    :WaitForChild("Events")
+    :WaitForChild("Inventory")
+
+local getInventory = inventoryEvents:WaitForChild("GetPlayerInventory")
+local toggleFavorite = inventoryEvents:WaitForChild("ToggleFavoriteItem")
+
+local running = false
+
+local function notify(text)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Auto Unfavorite",
+            Text = text,
+            Duration = 3
+        })
+    end)
+end
+
+local function isUUID(value)
+    return type(value) == "string"
+        and value:match(
+            "^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$"
+        ) ~= nil
+end
+
+local function getItemId(key, value)
+    if type(value) == "string" and isUUID(value) then
+        return value
+    end
+
+    if type(key) == "string" and isUUID(key) then
+        return key
+    end
+
+    return nil
+end
+
+local function collectIds(value, results, seen)
+    if type(value) ~= "table" then
+        return
+    end
+
+    if seen[value] then
+        return
+    end
+
+    seen[value] = true
+
+    for key, child in pairs(value) do
+        local id = getItemId(key, child)
+
+        if id then
+            results[id] = true
+        end
+
+        if type(child) == "table" then
+            collectIds(child, results, seen)
+        end
+    end
+end
+
+local function getAllItemIds()
+    local success, inventory = pcall(function()
+        return getInventory:InvokeServer()
+    end)
+
+    if not success then
+        warn("GetPlayerInventory failed:", inventory)
+        return nil
+    end
+
+    local ids = {}
+    collectIds(inventory, ids, {})
+
+    return ids
+end
+
+notify("LOADED - press >")
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then
+        return
+    end
+
+    if input.KeyCode ~= Enum.KeyCode.Period then
+        return
+    end
+
+    running = not running
+
+    if not running then
+        notify("STOPPED")
+        return
+    end
+
+    notify("Reading full inventory...")
+
+    task.spawn(function()
+        local ids = getAllItemIds()
+
+        if not ids then
+            running = false
+            notify("Couldn't read inventory")
+            return
+        end
+
+        local list = {}
+
+        for id in pairs(ids) do
+            table.insert(list, id)
+        end
+
+        notify("Found " .. #list .. " items")
+
+        local completed = 0
+
+        for _, itemId in ipairs(list) do
+            if not running then
+                break
+            end
+
+            local success, result = pcall(function()
+                return toggleFavorite:InvokeServer(itemId)
+            end)
+
+            if success then
+                completed += 1
+                print("Unfavoriting", completed, "/", #list, itemId, result)
+            else
+                warn("Failed:", itemId, result)
+            end
+
+            if completed % 25 == 0 then
+                notify("Progress: " .. completed .. "/" .. #list)
+            end
+
+            task.wait(0.08)
+        end
+
+        if running then
+            running = false
+            notify("DONE - processed " .. completed .. " items")
+        else
+            notify("STOPPED at " .. completed .. "/" .. #list)
+        end
+    end)
+end)
