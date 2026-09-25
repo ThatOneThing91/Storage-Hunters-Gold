@@ -1,0 +1,38 @@
+local UIS = game:GetService("UserInputService")
+
+local Roll = game:GetService("ReplicatedStorage")
+    :WaitForChild("Events")
+    :WaitForChild("WildWestMarket")
+    :WaitForChild("Roll")
+
+local running = false
+
+print("AUTO ROLL LOADED - PRESS , TO TOGGLE")
+
+local function toggle()
+    running = not running
+
+    print(running and "AUTO ROLL ON" or "AUTO ROLL OFF")
+
+    if not running then
+        return
+    end
+
+    task.spawn(function()
+        while running do
+            task.spawn(function()
+                pcall(function()
+                    Roll:InvokeServer()
+                end)
+            end)
+
+            task.wait(0.05)
+        end
+    end)
+end
+
+UIS.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.Comma then
+        toggle()
+    end
+end)
