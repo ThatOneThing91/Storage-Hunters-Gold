@@ -1,0 +1,136 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+
+local LocalPlayer = Players.LocalPlayer
+local busy = false
+
+local Vehicles = ReplicatedStorage:WaitForChild("Events"):WaitForChild("Vehicles")
+local GetVehicleItems = Vehicles:WaitForChild("GetVehicleItems")
+local TransferVehicleItems = Vehicles:WaitForChild("TransferVehicleItemsToInventory")
+
+local function notify(text)
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = "Instant Unload",
+            Text = text,
+            Duration = 3
+        })
+    end)
+end
+
+-- Find the player's equipped vehicle
+local function getMyVehicle(vehicleId)
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("Model") then
+            local guid = obj:GetAttribute("VehicleGUID") or obj:GetAttribute("GUID")
+
+            if guid and tostring(guid) == tostring(vehicleId) then
+                return obj
+            end
+        end
+    end
+
+    return nil
+end
+
+local function unloadVehicle()
+    if busy then
+        notify("Already unloading...")
+        return
+    end
+
+    busy = true
+
+    local vehicleId = LocalPlayer:GetAttribute("EquippedVehicle")
+
+    if not vehicleId or vehicleId == "" then
+        notify("No equipped vehicle found.")
+        busy = false
+        return
+    end
+
+    local vehicle = getMyVehicle(vehicleId)
+
+    -- Same seating behavior as the NexHub script
+    if vehicle then
+        local character = LocalPlayer.Character
+        local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+        if humanoid then
+            local seat =
+                vehicle:FindFirstChild("DriveSeat")
+                or vehicle:FindFirstChildWhichIsA("VehicleSeat", true)
+
+            if seat and humanoid.SeatPart ~= seat then
+                notify("Sitting in vehicle...")
+                seat:Sit(humanoid)
+                task.wait(0.2)
+            end
+        end
+    end
+
+    notify("Checking vehicle...")
+
+    local success, items = pcall(function()
+        return GetVehicleItems:InvokeServer(vehicleId)
+    end)
+
+    if not success or type(items) ~= "table" then
+        notify("Failed to get vehicle items.")
+        busy = false
+        return
+    end
+
+    local guids = {}
+
+    for guid in pairs(items) do
+        table.insert(guids, guid)
+    end
+
+    if #guids == 0 then
+        notify("Vehicle is empty.")
+        busy = false
+        return
+    end
+
+    notify("Unloading " .. #guids .. " items...")
+
+    local transferSuccess = pcall(function()
+        TransferVehicleItems:FireServer(guids)
+    end)
+
+    if transferSuccess then
+        notify("Successfully unloaded " .. #guids .. " items!")
+    else
+        notify("Unload failed.")
+    end
+
+    -- Matches the NexHub behavior
+    if vehicle then
+        pcall(function()
+            vehicle:SetAttribute("CargoWeight", 0)
+        end)
+    end
+
+    task.wait(0.4)
+    busy = false
+end
+
+-- Startup notification
+task.spawn(function()
+    task.wait(1)
+    notify("Loaded — press ' to unload")
+end)
+
+-- ' key
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.Quote then
+        task.spawn(unloadVehicle)
+    end
+end)
