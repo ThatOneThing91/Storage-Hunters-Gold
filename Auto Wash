@@ -1,0 +1,348 @@
+--====================================================
+-- STORAGE HUNTERS - STANDALONE AUTO WASH
+--====================================================
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Events = ReplicatedStorage:WaitForChild("Events")
+local Wash = Events:WaitForChild("Wash")
+
+local GetSlotState = Wash:WaitForChild("GetSlotState")
+local GetWashableItems = Wash:WaitForChild("GetWashableItems")
+local StartWash = Wash:WaitForChild("StartWash")
+local CollectWash = Wash:WaitForChild("CollectWash")
+local ClaimWashedItem = Wash:WaitForChild("ClaimWashedItem")
+
+-- Kill an older copy if you rerun the script
+_G.StorageHuntersAutoWashRunId = (_G.StorageHuntersAutoWashRunId or 0) + 1
+local RUN_ID = _G.StorageHuntersAutoWashRunId
+
+local LOOP_DELAY = 1
+local ACTION_DELAY = 0.35
+
+print("[AUTO WASH] Started")
+
+--====================================================
+-- REMOTE HELPERS
+--====================================================
+
+local function getSlotState()
+    local ok, result = pcall(function()
+        return GetSlotState:InvokeServer()
+    end)
+
+    if not ok then
+        warn("[AUTO WASH] GetSlotState failed:", result)
+        return nil
+    end
+
+    return result
+end
+
+local function getWashableItems()
+    local ok, result = pcall(function()
+        return GetWashableItems:InvokeServer()
+    end)
+
+    if not ok then
+        warn("[AUTO WASH] GetWashableItems failed:", result)
+        return {}
+    end
+
+    if type(result) ~= "table" then
+        return {}
+    end
+
+    return result.items or {}
+end
+
+--====================================================
+-- ITEM SELECTION
+--====================================================
+
+local function chooseItem(items, usedGuids)
+    if type(items) ~= "table" then
+        return nil
+    end
+
+    -- NexHub prefers Mint items first.
+    for _, item in ipairs(items) do
+        local guid = item.guid
+        local condition = tostring(
+            item.Condition
+            or item.condition
+            or ""
+        ):lower()
+
+        if guid
+            and not usedGuids[guid]
+            and condition == "mint"
+        then
+            return item
+        end
+    end
+
+    -- Otherwise use the next server-approved washable item.
+    for _, item in ipairs(items) do
+        local guid = item.guid
+
+        if guid and not usedGuids[guid] then
+            return item
+        end
+    end
+
+    return nil
+end
+
+--====================================================
+-- WASH ACTIONS
+--====================================================
+
+local function startItem(slotIndex, item)
+    if not item or not item.guid then
+        return false
+    end
+
+    print(
+        "[AUTO WASH] Loading slot",
+        slotIndex,
+        item.guid,
+        item.source,
+        item.vehicleGUID
+    )
+
+    local ok, result = pcall(function()
+        return StartWash:InvokeServer(
+            slotIndex,
+            item.guid,
+            item.source,
+            item.vehicleGUID
+        )
+    end)
+
+    if not ok then
+        warn(
+            "[AUTO WASH] StartWash failed on slot",
+            slotIndex,
+            result
+        )
+
+        return false
+    end
+
+    print("[AUTO WASH] Slot", slotIndex, "started")
+
+    return true
+end
+
+local function collectSlot(slotIndex)
+    print("[AUTO WASH] Collecting slot", slotIndex)
+
+    local ok, result = pcall(function()
+        return CollectWash:InvokeServer(slotIndex)
+    end)
+
+    if not ok then
+        warn(
+            "[AUTO WASH] CollectWash failed on slot",
+            slotIndex,
+            result
+        )
+
+        return false
+    end
+
+    print("[AUTO WASH] Slot", slotIndex, "collected")
+
+    return true
+end
+
+local function claimSlot(slotIndex)
+    print("[AUTO WASH] Claiming slot", slotIndex)
+
+    local ok, result = pcall(function()
+        return ClaimWashedItem:InvokeServer(slotIndex)
+    end)
+
+    if not ok then
+        warn(
+            "[AUTO WASH] ClaimWashedItem failed on slot",
+            slotIndex,
+            result
+        )
+
+        return false
+    end
+
+    if type(result) == "table" and result.success == false then
+        warn(
+            "[AUTO WASH] Claim rejected on slot",
+            slotIndex
+        )
+
+        return false
+    end
+
+    print("[AUTO WASH] Slot", slotIndex, "claimed")
+
+    return true
+end
+
+--====================================================
+-- PROCESS ONE PASS
+--====================================================
+
+local function processWash()
+    local state = getSlotState()
+
+    if type(state) ~= "table" then
+        return
+    end
+
+    local unlockedCount = tonumber(state.unlockedCount) or 1
+    unlockedCount = math.clamp(unlockedCount, 1, 3)
+
+    local slots = state.slots
+
+    if type(slots) ~= "table" then
+        return
+    end
+
+    local usedGuids = {}
+
+    --================================================
+    -- PASS 1
+    -- Clear anything already completed.
+    --================================================
+
+    for slotIndex = 1, unlockedCount do
+
+        local slotData =
+            slots[tostring(slotIndex)]
+            or slots[slotIndex]
+
+        if slotData then
+
+            -- NexHub uses this as the final claim state.
+            if slotData.Washed == true then
+
+                claimSlot(slotIndex)
+
+                task.wait(ACTION_DELAY)
+
+            else
+
+                local now = workspace:GetServerTimeNow()
+
+                local startTime =
+                    tonumber(slotData.StartTime)
+                    or now
+
+                local duration =
+                    tonumber(slotData.Duration)
+                    or 0
+
+                local elapsed = now - startTime
+                local remaining = duration - elapsed
+
+                if remaining <= 0 then
+
+                    collectSlot(slotIndex)
+
+                    task.wait(ACTION_DELAY)
+                end
+            end
+        end
+    end
+
+    -- Give the server a moment to update the slots.
+    task.wait(0.4)
+
+    --================================================
+    -- PASS 2
+    -- Re-read state after collection/claims.
+    --================================================
+
+    state = getSlotState()
+
+    if type(state) ~= "table"
+        or type(state.slots) ~= "table"
+    then
+        return
+    end
+
+    slots = state.slots
+
+    unlockedCount =
+        math.clamp(
+            tonumber(state.unlockedCount) or unlockedCount,
+            1,
+            3
+        )
+
+    --================================================
+    -- PASS 3
+    -- Fill every empty unlocked slot.
+    --================================================
+
+    for slotIndex = 1, unlockedCount do
+
+        local slotData =
+            slots[tostring(slotIndex)]
+            or slots[slotIndex]
+
+        if not slotData then
+
+            -- Refresh the eligible list for EACH slot.
+            -- This prevents stale item data after starting
+            -- another slot.
+            local washableItems = getWashableItems()
+
+            local item =
+                chooseItem(
+                    washableItems,
+                    usedGuids
+                )
+
+            if item then
+
+                usedGuids[item.guid] = true
+
+                local started =
+                    startItem(
+                        slotIndex,
+                        item
+                    )
+
+                if started then
+                    task.wait(0.5)
+                end
+            end
+        end
+    end
+end
+
+--====================================================
+-- MAIN LOOP
+--====================================================
+
+task.spawn(function()
+
+    while
+        _G.StorageHuntersAutoWashRunId == RUN_ID
+    do
+
+        local ok, err = pcall(processWash)
+
+        if not ok then
+            warn(
+                "[AUTO WASH] Loop error:",
+                err
+            )
+        end
+
+        task.wait(LOOP_DELAY)
+    end
+
+    print("[AUTO WASH] Stopped")
+end)
