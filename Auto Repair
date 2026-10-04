@@ -1,0 +1,340 @@
+--====================================================
+-- STORAGE HUNTERS - AUTO WRENCH REPAIR
+--
+-- Fresh inventory scan before EVERY repair.
+-- Finds items with the "Broken" mutator.
+-- Uses the inventory TABLE KEY as the current GUID.
+-- Waits for the wrench repair before finding the next.
+--====================================================
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Events = ReplicatedStorage:WaitForChild("Events")
+
+local InventoryEvents =
+    Events:WaitForChild("Inventory")
+
+local WrenchShop =
+    Events:WaitForChild("WrenchShop")
+
+local GetPlayerInventory =
+    InventoryEvents:WaitForChild("GetPlayerInventory")
+
+local RepairWithWrench =
+    WrenchShop:WaitForChild("RepairWithWrench")
+
+--====================================================
+-- SETTINGS
+--====================================================
+
+-- You said the wrench takes about 5 seconds.
+-- Give the server a tiny bit of extra time to update inventory.
+local REPAIR_WAIT = 5.25
+
+-- Delay when nothing broken is found.
+local EMPTY_SCAN_WAIT = 1
+
+-- Kill previous copy when rerunning.
+_G.StorageHuntersAutoWrenchRunId =
+    (_G.StorageHuntersAutoWrenchRunId or 0) + 1
+
+local RUN_ID =
+    _G.StorageHuntersAutoWrenchRunId
+
+--====================================================
+-- GET FRESH INVENTORY
+--====================================================
+
+local function getInventory()
+
+    local ok, result = pcall(function()
+        return GetPlayerInventory:InvokeServer()
+    end)
+
+    if not ok then
+        warn(
+            "[AUTO REPAIR] Inventory request failed:",
+            result
+        )
+
+        return nil
+    end
+
+    return result
+end
+
+--====================================================
+-- BROKEN DETECTION
+--====================================================
+
+local function containsBroken(value, depth, visited)
+
+    depth = depth or 0
+    visited = visited or {}
+
+    if depth > 8 then
+        return false
+    end
+
+    if type(value) ~= "table" then
+        return false
+    end
+
+    if visited[value] then
+        return false
+    end
+
+    visited[value] = true
+
+    for key, data in pairs(value) do
+
+        local keyLower =
+            tostring(key):lower()
+
+        --============================================
+        -- Broken = true
+        --============================================
+
+        if keyLower == "broken"
+            and data == true
+        then
+            return true
+        end
+
+        --============================================
+        -- Condition = "Broken"
+        -- Status = "Broken"
+        -- State = "Broken"
+        --============================================
+
+        if (
+            keyLower == "condition"
+            or keyLower == "status"
+            or keyLower == "state"
+        )
+            and type(data) == "string"
+            and data:lower() == "broken"
+        then
+            return true
+        end
+
+        --============================================
+        -- Mutators table
+        --
+        -- Handles things like:
+        --
+        -- Mutators = {
+        --     Broken = true
+        -- }
+        --
+        -- or:
+        --
+        -- Mutators = {
+        --     "Broken"
+        -- }
+        --============================================
+
+        if keyLower == "mutators"
+            and type(data) == "table"
+        then
+
+            for mutatorName, mutatorValue in pairs(data) do
+
+                if tostring(mutatorName):lower() == "broken"
+                    and mutatorValue ~= false
+                then
+                    return true
+                end
+
+                if type(mutatorValue) == "string"
+                    and mutatorValue:lower() == "broken"
+                then
+                    return true
+                end
+
+                if type(mutatorValue) == "table" then
+
+                    local name =
+                        mutatorValue.Name
+                        or mutatorValue.name
+                        or mutatorValue.Mutator
+                        or mutatorValue.mutator
+
+                    if name
+                        and tostring(name):lower() == "broken"
+                    then
+                        return true
+                    end
+                end
+            end
+        end
+
+        -- Search nested structures.
+        if type(data) == "table" then
+
+            if containsBroken(
+                data,
+                depth + 1,
+                visited
+            ) then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+--====================================================
+-- FIND ONE CURRENT BROKEN ITEM
+--====================================================
+
+local function findBrokenItem()
+
+    -- IMPORTANT:
+    -- Fresh server inventory EVERY time.
+    local inventory =
+        getInventory()
+
+    if type(inventory) ~= "table" then
+        return nil, nil
+    end
+
+    -- NexHub's inventory logic uses:
+    --
+    -- for guid, item in pairs(inv)
+    --
+    -- So the TABLE KEY is the GUID.
+    for guid, item in pairs(inventory) do
+
+        if type(item) == "table"
+            and containsBroken(item)
+        then
+
+            return guid, item
+        end
+    end
+
+    return nil, nil
+end
+
+--====================================================
+-- REPAIR ONE CURRENT ITEM
+--====================================================
+
+local function repairCurrentItem(guid)
+
+    print(
+        "[AUTO REPAIR] Repairing:",
+        guid
+    )
+
+    local startedAt = os.clock()
+
+    local ok, result = pcall(function()
+
+        return RepairWithWrench:InvokeServer(
+            guid
+        )
+
+    end)
+
+    if not ok then
+
+        warn(
+            "[AUTO REPAIR] RepairWithWrench failed:",
+            guid,
+            result
+        )
+
+        return false
+    end
+
+    -- If InvokeServer itself took ~5 seconds,
+    -- don't wait another full 5 seconds.
+    local elapsed =
+        os.clock() - startedAt
+
+    local remaining =
+        REPAIR_WAIT - elapsed
+
+    if remaining > 0 then
+        task.wait(remaining)
+    else
+        task.wait(0.15)
+    end
+
+    return true
+end
+
+--====================================================
+-- MAIN LOOP
+--====================================================
+
+task.spawn(function()
+
+    print(
+        "[AUTO REPAIR] Wrench automation started."
+    )
+
+    local repairedCount = 0
+
+    while
+        _G.StorageHuntersAutoWrenchRunId
+            == RUN_ID
+    do
+
+        --============================================
+        -- FIND CURRENT GUID
+        --============================================
+
+        local guid, item =
+            findBrokenItem()
+
+        if guid then
+
+            print(
+                "[AUTO REPAIR] Broken item found:",
+                guid
+            )
+
+            --========================================
+            -- REPAIR ONLY THIS ITEM
+            --========================================
+
+            local success =
+                repairCurrentItem(guid)
+
+            if success then
+
+                repairedCount += 1
+
+                print(
+                    "[AUTO REPAIR] Repair finished.",
+                    "Total:",
+                    repairedCount
+                )
+            end
+
+            -- IMPORTANT:
+            --
+            -- We DO NOT keep the GUID.
+            -- We DO NOT use a previously built list.
+            --
+            -- Loop returns to findBrokenItem(),
+            -- which calls GetPlayerInventory again.
+            --
+            -- Therefore if the server changed the
+            -- item's GUID, we get the NEW GUID.
+
+        else
+
+            -- No Broken mutation currently found.
+            task.wait(EMPTY_SCAN_WAIT)
+        end
+    end
+
+    print(
+        "[AUTO REPAIR] Stopped."
+    )
+end)
